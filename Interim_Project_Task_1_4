@@ -1,0 +1,39 @@
+WITH monthly_data AS (
+    SELECT
+        DATE_TRUNC('month', ad_date) AS month,
+        campaign_name,
+        SUM(reach) AS total_reach
+    FROM (
+        SELECT 
+            f.ad_date,
+            f.reach,
+            fc.campaign_name
+        FROM facebook_ads_basic_daily f
+        JOIN facebook_campaign fc
+            ON f.campaign_id = fc.campaign_id
+
+        UNION ALL
+
+        SELECT 
+            g.ad_date,
+            g.reach,
+            g.campaign_name 
+        FROM google_ads_basic_daily g
+    ) t
+    GROUP BY month, campaign_name
+),
+growth AS (
+    SELECT
+       DATE(month) as month,
+        campaign_name,
+        total_reach,
+        total_reach - LAG(total_reach) OVER (
+            PARTITION BY campaign_name ORDER BY month
+        ) AS reach_growth
+    FROM monthly_data
+)
+SELECT *
+FROM growth
+WHERE reach_growth IS NOT NULL
+ORDER BY reach_growth DESC
+LIMIT 1;
