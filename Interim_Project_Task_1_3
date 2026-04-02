@@ -1,0 +1,24 @@
+SELECT
+    DATE_TRUNC('week', ad_date) AS week,
+    campaign_name,
+    SUM(value) AS total_value
+FROM (
+    SELECT 
+        f.ad_date,
+        f.value,
+        fc.campaign_name
+    FROM facebook_ads_basic_daily f
+    JOIN facebook_campaign fc
+        ON f.campaign_id = fc.campaign_id
+
+    UNION ALL
+
+    SELECT 
+        g.ad_date,
+        g.value, 
+        g.campaign_name       
+    FROM google_ads_basic_daily g
+) t
+GROUP BY week, campaign_name
+ORDER BY total_value DESC
+LIMIT 1;
