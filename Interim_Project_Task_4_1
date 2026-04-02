@@ -1,0 +1,60 @@
+WITH event_data AS (
+  SELECT
+    DATE(TIMESTAMP_MICROS(event_timestamp)) AS event_date,
+    user_pseudo_id,
+    (
+      SELECT ep.value.int_value
+      FROM UNNEST(event_params) AS ep
+      WHERE ep.key = "ga_session_id"
+    ) AS session_id,
+    event_name,
+    (
+      SELECT ep.value.string_value
+      FROM UNNEST(event_params) AS ep
+      WHERE ep.key = "page_location"
+    ) AS page_url
+  FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+  WHERE _TABLE_SUFFIX BETWEEN '20200101' AND '20201231'
+    AND event_name IN ('session_start', 'purchase')
+),
+
+session_list AS (
+  SELECT DISTINCT
+    user_pseudo_id,
+    session_id,
+    page_url
+  FROM event_data
+  WHERE event_name = 'session_start'
+),
+
+purchase_list AS (
+  SELECT DISTINCT
+    sl.page_url,
+    sl.user_pseudo_id,
+    sl.session_id
+  FROM session_list sl
+  LEFT JOIN event_data ed
+    ON sl.user_pseudo_id = ed.user_pseudo_id
+    AND sl.session_id = ed.session_id
+  WHERE ed.event_name = 'purchase'
+)
+
+SELECT
+  sl.page_url,
+
+  COUNT(DISTINCT CONCAT(sl.user_pseudo_id, "-", sl.session_id)) AS unique_sessions,
+
+  COUNT(DISTINCT CONCAT(pl.user_pseudo_id, "-", pl.session_id)) AS purchase_count,
+
+  SAFE_DIVIDE(
+    COUNT(DISTINCT CONCAT(pl.user_pseudo_id, "-", pl.session_id)),
+    COUNT(DISTINCT CONCAT(sl.user_pseudo_id, "-", sl.session_id))
+  ) AS purchase_conversion_rate
+
+FROM session_list sl
+LEFT JOIN purchase_list pl
+  ON sl.user_pseudo_id = pl.user_pseudo_id
+  AND sl.session_id = pl.session_id
+
+GROUP BY sl.page_url
+ORDER BY purchase_conversion_rate DESC;
