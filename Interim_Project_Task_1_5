@@ -1,0 +1,49 @@
+WITH all_data AS (
+
+    SELECT 
+        f.ad_date,
+        fa.adset_name
+    FROM facebook_ads_basic_daily f
+    JOIN facebook_adset fa
+        ON f.adset_id = fa.adset_id
+    WHERE f.impressions > 0
+
+    UNION ALL
+
+    SELECT 
+        g.ad_date,
+        g.adset_name
+    FROM google_ads_basic_daily g
+    WHERE g.impressions > 0
+),
+
+dedup AS (
+    SELECT DISTINCT
+        adset_name,
+        ad_date
+    FROM all_data
+),
+
+streaks AS (
+    SELECT
+        adset_name,
+        COUNT(*) AS streak_length
+    FROM (
+        SELECT
+            adset_name,
+            ad_date,
+            ad_date - ROW_NUMBER() OVER (
+                PARTITION BY adset_name ORDER BY ad_date
+            ) * INTERVAL '1 day' AS grp
+        FROM dedup
+    ) s
+    GROUP BY adset_name, grp
+)
+
+SELECT
+    adset_name,
+    MAX(streak_length) AS max_streak_days
+FROM streaks
+GROUP BY adset_name
+ORDER BY max_streak_days DESC
+LIMIT 1;
